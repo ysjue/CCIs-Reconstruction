@@ -23,4 +23,5 @@ setup(
             'image_capture = reconstruction.image_capture:main'
         ],
     },
+    scripts = []
 )

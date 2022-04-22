@@ -44,9 +44,13 @@ def main():
     config = rs.config()
     config.enable_stream(rs.stream.depth, IMAGE_WIDTH, IMAGE_HEIGHT, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, IMAGE_WIDTH, IMAGE_HEIGHT, rs.format.bgr8, 30)
-
+    
+    # rs.align allows us to perform alignment of depth frames to others frames
+    align = rs.align(rs.stream.color) # align to color frame
     # Start streaming
-    pipeline.start(config)
+    profile = pipeline.start(config)
+    depth_sensor = profile.get_device().first_depth_sensor()
+    depth_scale = depth_sensor.get_depth_scale() * 1.017 # Correct depth scale
 
     image_dir = create_image_directory()
 
@@ -59,27 +63,28 @@ def main():
         while(True):
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
+            aligned_frames = align.process(frames)
             color_frame = frames.get_color_frame()
-            depth_frame = frames.get_depth_frame()
+            depth_frame = aligned_frames.get_depth_frame()
             if not depth_frame or not color_frame:
                 continue
 
             # Convert images to numpy arrays
             color_image = np.asanyarray(color_frame.get_data())
-            depth_image = np.asanyarray(depth_frame.get_data())
+            depth_image = np.asanyarray(depth_frame.get_data()) 
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
             # display the captured image
             cv2.imshow('Color Images',color_image)
-            cv2.imshow('Depth Images',depth_image)
+            cv2.imshow('Depth Images',depth_colormap)
             pressedKey = (cv2.waitKey(1) & 0xFF)
 
             # handle key inputs
             if pressedKey == 27:
                 break
             elif pressedKey == 32:
-                cv2.imwrite(os.path.join(image_dir, str(image_counter) + 'color'+'.jpg'), color_image)
-                cv2.imwrite(os.path.join(image_dir, str(image_counter) + 'depth'+'.png'), depth_image)
+                cv2.imwrite(os.path.join(image_dir, str(image_counter) + '_color'+'.jpg'), color_image)
+                cv2.imwrite(os.path.join(image_dir, str(image_counter) + '_depth'+'.png'), depth_image)
                 print('Image caputured - ' + os.path.join(image_dir, str(image_counter) + '.jpg'))
 
                 image_counter+=1

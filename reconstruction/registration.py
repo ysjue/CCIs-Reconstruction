@@ -1,5 +1,4 @@
 
-from cv2 import CV_16UC1, CV_8UC1, CV_8UC3
 from matplotlib.transforms import Transform
 import numpy as np
 import os
@@ -9,8 +8,6 @@ from matplotlib import pyplot as plt
 import cv2
 from ros2_aruco.transformations import quaternion_matrix, quaternion_inverse
 
-global using_mask
-using_mask = True
 class CameraPose:
 
     def __init__(self, meta, mat):
@@ -24,59 +21,40 @@ class CameraPose:
 
 def integration(root, CameraIntrinsic=None):
     files = os.listdir(root)
-    base2cam = np.asarray([[-0.99833985 , 0.03621568,  0.044788 ,  -0.08876],
-                [-0.01750416 ,-0.93158318 , 0.36310656 ,-0.317585],
-                [ 0.0548739  , 0.36171978 , 0.93067054 ,-0.251979],
+    base2cam = np.asarray([[-0.99833985 , 0.03621568,  0.044788 ,  -0.085576],
+                [-0.01750416 ,-0.93158318 , 0.36310656 ,-0.347585],
+                [ 0.0548739  , 0.36171978 , 0.93067054 ,-0.255979],
                 [ 0.  ,        0.     ,     0.    ,      1.        ]])
     
     volume = o3d.pipelines.integration.ScalableTSDFVolume(
-            voxel_length=0.0008,
-            sdf_trunc=0.003,
+            voxel_length=0.0006,
+            sdf_trunc=0.001,
             color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
     count = 0
-    ros_poses = read_pose(os.path.join(root, 'poses.yaml').replace('\\','/'), 'tracking')
+    ros_poses = read_pose(os.path.join(root, 'poses.yaml').replace('\\','/'))
     for i in range(11):
-        # if i !=7:
-        #     continue
-        # if count != 4 and count != 7:
-        #     count += 1 
-        #     continue
-
+        # # if count >=7:
+        # #     break
+        if count != 4 and count != 9:
+            count += 1 
+            continue
         metadata = str(i)
         # metadata = f.split('_')[0]
         pose = ros_poses[int(metadata)]
         # Transform_base_W ----> Transform_W_base
-        base2hand =  quaternion_matrix(pose[3:7])    # rotation
-        base2hand[:3,3] = pose[:3]    # translation (m)
-        hand2base = np.linalg.inv(base2hand)
+        hand2cam =  quaternion_matrix(pose[3:7])    # rotation
+        hand2cam[:3,3] = pose[:3]    # translation (m)
+        # hand2base = np.linalg.inv(hand2base)
         # calculate camera frame w.r.t. end effector frame (W), i.e., Transform_hand2cam
-        mat = np.matmul(hand2base, base2cam)
-        # mat =  hand2cam
+        # mat = np.matmul(hand2base, base2cam)
+        mat =  hand2cam
         camera_pose = CameraPose(metadata, mat)
         camera_pose.pose[:3,3] =camera_pose.pose[:3,3] # * 0.001
-        if using_mask:
-            mask_file = os.path.join(root, metadata+'_annotation.jpg').replace('\\','/')
-            mask = cv2.imread(mask_file,CV_8UC1)
-            color_file = os.path.join(root, metadata+'_color.jpg').replace('\\','/')
-            
-            color_img = cv2.imread(color_file)
-            color_img[mask == 2 ] = [0,0,0]
-            
-            color = o3d.geometry.Image(color_img.astype(np.uint8))
-            
-            depth_file = os.path.join(root, metadata+'_depth.png').replace('\\','/')
-            depth_img = cv2.imread(depth_file, CV_16UC1)
-            depth_img[mask == 2 ] = 0
-            
-
-            plt.imshow(depth_img)
-            plt.show()
-            depth = o3d.geometry.Image(depth_img.astype(np.uint16))
-        else:
-            color_file = os.path.join(root, metadata+'_color.jpg').replace('\\','/')
-            depth_file = os.path.join(root, metadata+'_depth.png').replace('\\','/')
-            color = o3d.io.read_image(color_file)
-            depth = o3d.io.read_image(depth_file)
+        
+        color_file = os.path.join(root, metadata+'_color.jpg').replace('\\','/')
+        color = o3d.io.read_image(color_file)
+        depth_file = os.path.join(root, metadata+'_depth.png').replace('\\','/')
+        depth = o3d.io.read_image(depth_file)
         
         
         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
